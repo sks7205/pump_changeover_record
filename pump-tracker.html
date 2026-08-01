@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARS-2/3 Pump Tracker</title>
+<style>
+:root {
+  --navy: #1F4E78;
+  --navy-dark: #163a5a;
+  --bg: #F2F4F7;
+  --card: #FFFFFF;
+  --ink: #1C2530;
+  --muted: #6B7686;
+  --border: #DDE2E8;
+  --green: #C6EFCE;
+  --green-ink: #256029;
+  --red: #FFC7CE;
+  --red-ink: #9C0006;
+  --critical: #C00000;
+  --critical-ink: #FFFFFF;
+  --neutral: #EDEFF2;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  padding-bottom: 40px;
+}
+header.topbar {
+  background: var(--navy);
+  color: white;
+  padding: 14px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+header.topbar h1 { margin: 0; font-size: 1.1rem; letter-spacing: .02em; }
+header.topbar .mode-tag {
+  display: inline-block;
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  background: rgba(255,255,255,.15);
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-top: 4px;
+}
+nav.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--navy-dark);
+  overflow-x: auto;
+}
+nav.tabs button {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,.7);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: .85rem;
+  cursor: pointer;
+}
+nav.tabs button.active { background: rgba(255,255,255,.15); color: white; font-weight: 600; }
+main { padding: 12px; max-width: 760px; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.block-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px 4px;
+}
+.block-section h3 {
+  margin: 2px 0 10px;
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--navy);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.equip-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.equip-row:last-child { border-bottom: none; }
+.equip-name { font-weight: 600; margin-bottom: 6px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-family: "SF Mono", "Courier New", monospace;
+  font-size: .78rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: var(--neutral);
+  color: var(--muted);
+}
+.chip.green { background: var(--green); color: var(--green-ink); }
+.chip.red { background: var(--red); color: var(--red-ink); }
+.chip.critical { background: var(--critical); color: var(--critical-ink); border-color: transparent; }
+.remark { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+.deviation { font-size: .8rem; color: var(--red-ink); margin-top: 4px; font-weight: 600; }
+.link-btn {
+  margin-top: 6px; background: none; border: none; color: var(--navy);
+  font-size: .78rem; font-weight: 600; padding: 0; cursor: pointer; text-decoration: underline;
+}
+table.status-table { width: 100%; border-collapse: collapse; background: var(--card); font-size: .82rem; }
+table.status-table th, table.status-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+table.status-table th { background: var(--navy); color: white; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+tr.status-overdue td:last-child { color: var(--critical); font-weight: 700; }
+tr.status-ok td:last-child { color: var(--green-ink); font-weight: 700; }
+.hint { color: var(--muted); font-size: .85rem; }
+input[type="date"], input[type="text"], select {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: .9rem; margin-bottom: 10px; background: white;
+}
+label { font-size: .78rem; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; }
+button.primary {
+  background: var(--navy); color: white; border: none; padding: 11px 16px; border-radius: 6px;
+  font-size: .9rem; font-weight: 600; cursor: pointer; width: 100%;
+}
+button.primary:active { background: var(--navy-dark); }
+button.primary:disabled { opacity: .5; }
+.toggle-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.toggle-btn {
+  font-family: "SF Mono", "Courier New", monospace; font-weight: 700; font-size: .8rem;
+  padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border); background: white;
+  color: var(--ink); cursor: pointer;
+}
+.toggle-btn.selected { background: var(--navy); color: white; border-color: var(--navy); }
+.form-equip-block { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.form-equip-block .equip-name { margin-bottom: 8px; }
+.field-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 6px 0 4px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+.modal-backdrop.hidden { display: none; }
+.modal { background: white; border-radius: 12px 12px 0 0; padding: 18px 16px 24px; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; }
+.modal h4 { margin-top: 0; }
+.status-toggle { display: flex; gap: 8px; margin-bottom: 10px; }
+.status-toggle button { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: white; font-weight: 700; cursor: pointer; }
+.status-toggle button.selected.y { background: var(--green); border-color: var(--green-ink); }
+.status-toggle button.selected.n { background: var(--red); border-color: var(--red-ink); }
+.toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--navy-dark); color: white; padding: 10px 18px; border-radius: 6px;
+  font-size: .85rem; z-index: 100; opacity: 0; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>ARS-2 / ARS-3 Pump Tracker</h1>
+  <span class="mode-tag" id="modeTag">View only</span>
+  <div id="editorNameTag" style="font-size:.8rem;margin-top:4px;opacity:.85"></div>
+</header>
+
+<div class="modal-backdrop hidden" id="pendingGate">
+  <div class="modal">
+    <h4>Edit access pending</h4>
+    <p class="hint">This device isn't approved for editing yet. Send this Device ID to whoever manages this tracker, and ask them to approve it in the Devices sheet.</p>
+    <input type="text" id="deviceIdDisplay" readonly>
+    <button class="primary" id="copyDeviceIdBtn">Copy Device ID</button>
+    <button class="link-btn" style="margin-top:12px" id="recheckBtn">I've been approved - check again</button>
+    <button class="link-btn" style="margin-top:6px" onclick="window.location.href = window.location.pathname">Go to view-only dashboard instead</button>
+  </div>
+</div>
+
+<div id="appShell" style="display:none">
+<nav class="tabs" id="tabsNav"></nav>
+
+<main>
+  <div id="tab-submit" class="tab-panel">
+    <label for="weekDate">Date</label>
+    <input type="date" id="weekDate">
+    <label for="generalRemarks">General remarks (optional)</label>
+    <input type="text" id="generalRemarks" placeholder="e.g. Routine weekly changeover">
+    <p class="hint">For each equipment: tap which pump(s) were found running, and which are now
+    running after your changeover. Pre-filled with last week's values - only change what's different.</p>
+    <div id="weeklyFormContainer"><p class="hint">Loading…</p></div>
+    <button class="primary" id="submitWeeklyBtn">Save this week's changeover</button>
+  </div>
+
+  <div id="tab-health" class="tab-panel active">
+    <p class="hint">Green = healthy &amp; currently running. Red = faulty, on standby. Dark red = faulty AND currently running - urgent.</p>
+    <div id="pumpHealthContainer"><p class="hint">Loading…</p></div>
+  </div>
+
+  <div id="tab-running" class="tab-panel">
+    <div id="runningStatusContainer"><p class="hint">Loading…</p></div>
+  </div>
+
+  <div id="tab-history" class="tab-panel">
+    <label for="historyDate">Check status as of</label>
+    <input type="date" id="historyDate">
+    <div id="historyContainer"></div>
+  </div>
+
+  <div id="tab-log" class="tab-panel">
+    <div id="changeLogContainer"><p class="hint">Loading…</p></div>
+  </div>
+</main>
+</div>
+
+<div class="modal-backdrop hidden" id="healthModalBackdrop">
+  <div class="modal">
+    <h4 id="healthModalTitle">Update pump health</h4>
+    <label for="healthPumpSelect">Pump</label>
+    <select id="healthPumpSelect"></select>
+    <label>Status</label>
+    <div class="status-toggle">
+      <button type="button" id="healthYBtn" class="y">Healthy (Y)</button>
+      <button type="button" id="healthNBtn" class="n">Faulty (N)</button>
+    </div>
+    <label for="healthRemarks">Remarks</label>
+    <input type="text" id="healthRemarks" placeholder="e.g. Bearing noise">
+    <button class="primary" id="saveHealthBtn">Save</button>
+    <button class="link-btn" style="margin-top:10px" onclick="closeHealthEditor()">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// MODE: view by default. Append ?edit=true to the URL to get the
+// edit form + pump-health update buttons. Share the plain URL with
+// people who should only see the dashboard, and the ?edit=true URL
+// with people who should be entering data.
+// ============================================================
+const IS_EDIT = new URLSearchParams(window.location.search).get("edit") === "true";
+
+function getDeviceId() {
+  const key = "arsPumpTrackerDeviceId";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : "dev-" + Math.random().toString(36).slice(2) + Date.now());
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+const DEVICE_ID = getDeviceId();
+let EDITOR_NAME = "";
+
+// ============================================================
+// EQUIPMENT CONFIG - mirrors the Excel Pump Health sheet exactly.
+// "always" pumps (only LUL/AB/BP/TP/CM's P4) are fixed recirculation
+// pumps - always expected running, not part of the weekly duty swap.
+// ============================================================
+const EQUIPMENT_CONFIG = [
+  { name: "LUL-1",  block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "LUL-2",  block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "AB-1",   block: "ARS-2", pumps: ["P1", "P2", "P3", "P4"], always: ["P4"] },
+  { name: "AB-2",   block: "ARS-2", pumps: ["P1", "P2", "P3", "P4"], always: ["P4"] },
+  { name: "BP-1",   block: "ARS-2", pumps: ["P1", "P2", "P3", "P4", "P5", "P6"], always: ["P4"] },
+  { name: "BP-2",   block: "ARS-2", pumps: ["P1", "P2", "P3", "P4", "P5", "P6"], always: ["P4"] },
+  { name: "TP-1",   block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "TP-2",   block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "TP-3",   block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "CM-1",   block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "CM-2",   block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
+  { name: "DM (Furnace)", block: "ARS-2", pumps: ["P1", "P2", "P3"], always: [] },
+  { name: "F-HPU-1", block: "ARS-2", pumps: ["P1", "P2"], always: [] },
+  { name: "F-HPU-2", block: "ARS-2", pumps: ["P1", "P2"], always: [] },
+  { name: "F-HPU-3", block: "ARS-2", pumps: ["P1", "P2"], always: [] },
+  { name: "Hot Well",  block: "Pump House", pumps: ["B", "C", "D"], always: [] },
+  { name: "Cold Well", block: "Pump House", pumps: ["A", "B", "C", "D"], always: [] },
+  { name: "PT-1", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
+  { name: "PT-2", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
+  { name: "PT-3", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
+  { name: "F-HPU-1 (ARS-3)", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
+  { name: "F-HPU-2 (ARS-3)", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
+  { name: "F-HPU-3 (ARS-3)", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
+  { name: "Main Pump",  block: "Cooling System", pumps: ["P1", "P2"], always: [] },
+  { name: "Spray pump", block: "Cooling System", pumps: ["P1", "P2"], always: [] },
+  { name: "DM water circulation", block: "Cooling System", pumps: ["P4", "P5"], always: [] },
+  { name: "DM HE cooling",        block: "Cooling System", pumps: ["P6", "P7"], always: [] },
+  { name: "Distilled HE cooling", block: "Cooling System", pumps: ["P8", "P9"], always: [] },
+];
+const BLOCK_ORDER = ["ARS-2", "Pump House", "ARS-3", "Cooling System"];
+
+// >>> SET THIS to your deployed Apps Script Web App URL <<<
+const API_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const OVERDUE_DAYS = 7;
+
+// ============================================================
+// Shared logic
+// ============================================================
+let STATE = { pumpHealth: [], weeklyLog: [], changeLog: [] };
+
+function splitCodes(str) {
+  if (!str) return [];
+  return String(str).split(",").map(s => s.trim()).filter(Boolean);
+}
+
+async function loadData() {
+  const res = await fetch(`${API_URL}?action=data`);
+  if (!res.ok) throw new Error("Failed to load data from the server");
+  STATE = await res.json();
+}
+
+function pumpHealthMap() {
+  const map = {};
+  STATE.pumpHealth.forEach(row => {
+    if (!map[row.equipment]) map[row.equipment] = {};
+    map[row.equipment][row.pumpCode] = { status: row.status, remarks: row.remarks };
+  });
+  return map;
+}
+
+function runningStatusMap(cutoffDate) {
+  const byEquip = {};
+  STATE.weeklyLog.forEach(row => {
+    const d = new Date(row.date);
+    if (cutoffDate && d > cutoffDate) return;
+    if (!byEquip[row.equipment] || d > byEquip[row.equipment]._d) {
+      byEquip[row.equipment] = { ...row, _d: d };
+    }
+  });
+  const out = {};
+  const now = new Date();
+  Object.keys(byEquip).forEach(eq => {
+    const rec = byEquip[eq];
+    const days = Math.floor((now - rec._d) / 86400000);
+    out[eq] = {
+      pumps: splitCodes(rec.changedTo),
+      asFound: splitCodes(rec.asFound),
+      lastDate: rec.date,
+      daysSince: days,
+      status: days > OVERDUE_DAYS ? "Overdue" : "OK",
+      deviation: rec.deviation || "",
+    };
+  });
+  return out;
+}
+
+function colorClass(equipCfg, pumpCode, healthMap, running) {
+  const health = (healthMap[equipCfg.name] || {})[pumpCode];
+  const status = health ? health.status : "";
+  const isAlways = equipCfg.always.includes(pumpCode);
+  const runningPumps = running ? running.pumps : [];
+  const isRunning = runningPumps.includes(pumpCode);
+  if (isAlways) {
+    if (status === "N") return "critical";
+    if (status === "Y") return "green";
+    return "neutral";
+  }
+  if (status === "N" && isRunning) return "critical";
+  if (status === "N") return "red";
+  if (status === "Y" && isRunning) return "green";
+  return "neutral";
+}
+
+function renderPumpHealth(container, editable) {
+  const healthMap = pumpHealthMap();
+  const running = runningStatusMap();
+  container.innerHTML = "";
+  BLOCK_ORDER.forEach(block => {
+    const equips = EQUIPMENT_CONFIG.filter(e => e.block === block);
+    if (!equips.length) return;
+    const section = document.createElement("section");
+    section.className = "block-section";
+    section.innerHTML = `<h3>${block}</h3>`;
+    equips.forEach(eq => {
+      const rec = running[eq.name];
+      const row = document.createElement("div");
+      row.className = "equip-row";
+      const chips = eq.pumps.map(code => {
+        const cls = colorClass(eq, code, healthMap, rec);
+        return `<span class="chip ${cls}" title="${code}">${code}</span>`;
+      }).join("");
+      const health = healthMap[eq.name] || {};
+      const remarkText = Object.values(health).map(h => h.remarks).filter(Boolean)[0] || "";
+      const deviation = rec && rec.deviation ? `<div class="deviation">⚠ ${rec.deviation}</div>` : "";
+      row.innerHTML = `
+        <div class="equip-name">${eq.name}</div>
+        <div class="chip-row">${chips}</div>
+        ${remarkText ? `<div class="remark">${remarkText}</div>` : ""}
+        ${deviation}
+        ${editable ? `<button class="link-btn" onclick="openHealthEditor('${eq.name}')">Update health</button>` : ""}
+      `;
+      section.appendChild(row);
+    });
+    container.appendChild(section);
+  });
+}
+
+function renderRunningStatus(container) {
+  const running = runningStatusMap();
+  let html = `<table class="status-table"><thead><tr>
+    <th>Equipment</th><th>Running Pump(s)</th><th>Last Changeover</th><th>Days Since</th><th>Status</th>
+  </tr></thead><tbody>`;
+  EQUIPMENT_CONFIG.forEach(eq => {
+    const rec = running[eq.name];
+    const statusClass = !rec ? "" : rec.status === "Overdue" ? "status-overdue" : "status-ok";
+    html += `<tr class="${statusClass}">
+      <td>${eq.name}</td>
+      <td>${rec ? rec.pumps.join(", ") : "No record"}</td>
+      <td>${rec ? rec.lastDate : "-"}</td>
+      <td>${rec ? rec.daysSince : "-"}</td>
+      <td>${rec ? rec.status : "No data"}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  container.innerHTML = html;
+}
+
+function renderHistoryLookup(container, dateStr) {
+  if (!dateStr) { container.innerHTML = "<p class='hint'>Pick a date above.</p>"; return; }
+  const cutoff = new Date(dateStr);
+  const running = runningStatusMap(cutoff);
+  let html = `<table class="status-table"><thead><tr>
+    <th>Equipment</th><th>Pump(s) Running (as of ${dateStr})</th><th>Actual Log Date Used</th>
+  </tr></thead><tbody>`;
+  EQUIPMENT_CONFIG.forEach(eq => {
+    const rec = running[eq.name];
+    html += `<tr>
+      <td>${eq.name}</td>
+      <td>${rec ? rec.pumps.join(", ") : "No record on or before that date"}</td>
+      <td>${rec ? rec.lastDate : "-"}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  container.innerHTML = html;
+}
+
+function renderChangeLog(container) {
+  const rows = [...STATE.changeLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  let html = `<table class="status-table"><thead><tr>
+    <th>When</th><th>Who</th><th>Type</th><th>Equipment</th><th>Field</th><th>From</th><th>To</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${new Date(r.timestamp).toLocaleString()}</td>
+      <td>${r.editor}</td>
+      <td>${r.type}</td>
+      <td>${r.equipment}</td>
+      <td>${r.field}</td>
+      <td>${r.oldValue || "-"}</td>
+      <td>${r.newValue || "-"}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  if (!rows.length) html = "<p class='hint'>No changes logged yet.</p>";
+  container.innerHTML = html;
+}
+
+// ============================================================
+// Tabs - which ones show depends on IS_EDIT
+// ============================================================
+function buildTabs() {
+  const tabs = IS_EDIT
+    ? [["submit", "Weekly Changeover"], ["health", "Pump Health"], ["running", "Running Status"], ["history", "History Lookup"], ["log", "Change Log"]]
+    : [["health", "Pump Health"], ["running", "Running Status"], ["history", "History Lookup"], ["log", "Change Log"]];
+
+  const nav = document.getElementById("tabsNav");
+  nav.innerHTML = tabs.map(([id, label], i) =>
+    `<button class="tab-btn${i === 0 ? " active" : ""}" data-tab="${id}">${label}</button>`
+  ).join("");
+
+  // Clear the static "active" classes from the HTML, then activate only the first tab
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  document.getElementById(`tab-${tabs[0][0]}`).classList.add("active");
+  if (!IS_EDIT) document.getElementById("tab-submit").style.display = "none";
+
+  nav.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      nav.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
+    });
+  });
+
+  document.getElementById("modeTag").textContent = IS_EDIT ? "Edit mode" : "View only";
+}
+
+document.getElementById("historyDate").addEventListener("change", (e) => {
+  renderHistoryLookup(document.getElementById("historyContainer"), e.target.value);
+});
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+// ============================================================
+// Edit-only: weekly changeover form
+// ============================================================
+let weeklySelections = {};
+
+function renderWeeklyForm() {
+  const running = runningStatusMap();
+  const container = document.getElementById("weeklyFormContainer");
+  container.innerHTML = "";
+  weeklySelections = {};
+
+  BLOCK_ORDER.forEach(block => {
+    const equips = EQUIPMENT_CONFIG.filter(e => e.block === block);
+    if (!equips.length) return;
+    const heading = document.createElement("h3");
+    heading.textContent = block;
+    heading.style.color = "#1F4E78";
+    heading.style.fontSize = ".82rem";
+    heading.style.textTransform = "uppercase";
+    heading.style.letterSpacing = ".07em";
+    heading.style.margin = "14px 2px 6px";
+    container.appendChild(heading);
+
+    equips.forEach(eq => {
+      const prev = running[eq.name] ? running[eq.name].pumps : [];
+      weeklySelections[eq.name] = { asFound: new Set(prev), changedTo: new Set(prev) };
+
+      const block_el = document.createElement("div");
+      block_el.className = "form-equip-block";
+      block_el.innerHTML = `
+        <div class="equip-name">${eq.name}</div>
+        <div class="field-label">As found (before changeover)</div>
+        <div class="toggle-group" data-equip="${eq.name}" data-field="asFound"></div>
+        <div class="field-label">Changed to (running now)</div>
+        <div class="toggle-group" data-equip="${eq.name}" data-field="changedTo"></div>
+      `;
+      container.appendChild(block_el);
+
+      ["asFound", "changedTo"].forEach(field => {
+        const group = block_el.querySelector(`.toggle-group[data-field="${field}"]`);
+        eq.pumps.forEach(code => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "toggle-btn";
+          btn.textContent = code;
+          if (weeklySelections[eq.name][field].has(code)) btn.classList.add("selected");
+          btn.addEventListener("click", () => {
+            const sel = weeklySelections[eq.name][field];
+            if (sel.has(code)) sel.delete(code); else sel.add(code);
+            btn.classList.toggle("selected");
+          });
+          group.appendChild(btn);
+        });
+      });
+    });
+  });
+}
+
+if (IS_EDIT) {
+  document.getElementById("submitWeeklyBtn").addEventListener("click", async () => {
+    const date = document.getElementById("weekDate").value;
+    const generalRemarks = document.getElementById("generalRemarks").value.trim();
+    if (!date) return alert("Please pick a date.");
+
+    const entries = [];
+    Object.keys(weeklySelections).forEach(eq => {
+      const sel = weeklySelections[eq];
+      if (sel.changedTo.size === 0 && sel.asFound.size === 0) return;
+      entries.push({
+        equipment: eq,
+        asFound: [...sel.asFound].join(", "),
+        changedTo: [...sel.changedTo].join(", "),
+      });
+    });
+
+    const btn = document.getElementById("submitWeeklyBtn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "submitWeekly", deviceId: DEVICE_ID, date, generalRemarks, entries }),
+      });
+      const result = await res.json();
+      if (!result.ok) throw new Error(result.error || "Save failed");
+      showToast("Weekly changeover saved.");
+      await loadData();
+      renderWeeklyForm();
+      renderPumpHealth(document.getElementById("pumpHealthContainer"), true);
+      renderRunningStatus(document.getElementById("runningStatusContainer"));
+      renderChangeLog(document.getElementById("changeLogContainer"));
+    } catch (err) {
+      alert("Could not save: " + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = "Save this week's changeover";
+    }
+  });
+}
+
+// ============================================================
+// Edit-only: pump health editor modal
+// ============================================================
+let healthEditEquip = null;
+let healthEditStatus = null;
+
+function openHealthEditor(equipName) {
+  healthEditEquip = equipName;
+  healthEditStatus = null;
+  const eq = EQUIPMENT_CONFIG.find(e => e.name === equipName);
+  document.getElementById("healthModalTitle").textContent = `Update pump health - ${equipName}`;
+  const select = document.getElementById("healthPumpSelect");
+  select.innerHTML = eq.pumps.map(p => `<option value="${p}">${p}</option>`).join("");
+  document.getElementById("healthRemarks").value = "";
+  document.getElementById("healthYBtn").classList.remove("selected");
+  document.getElementById("healthNBtn").classList.remove("selected");
+  document.getElementById("healthModalBackdrop").classList.remove("hidden");
+}
+function closeHealthEditor() {
+  document.getElementById("healthModalBackdrop").classList.add("hidden");
+}
+
+if (IS_EDIT) {
+  document.getElementById("healthYBtn").addEventListener("click", () => {
+    healthEditStatus = "Y";
+    document.getElementById("healthYBtn").classList.add("selected");
+    document.getElementById("healthNBtn").classList.remove("selected");
+  });
+  document.getElementById("healthNBtn").addEventListener("click", () => {
+    healthEditStatus = "N";
+    document.getElementById("healthNBtn").classList.add("selected");
+    document.getElementById("healthYBtn").classList.remove("selected");
+  });
+  document.getElementById("saveHealthBtn").addEventListener("click", async () => {
+    const pumpCode = document.getElementById("healthPumpSelect").value;
+    const remarks = document.getElementById("healthRemarks").value.trim();
+    if (!healthEditStatus) return alert("Choose Healthy or Faulty.");
+
+    const btn = document.getElementById("saveHealthBtn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({
+          action: "updateHealth", deviceId: DEVICE_ID, equipment: healthEditEquip, pumpCode,
+          status: healthEditStatus, remarks,
+        }),
+      });
+      const result = await res.json();
+      if (!result.ok) throw new Error(result.error || "Save failed");
+      showToast("Pump health updated.");
+      closeHealthEditor();
+      await loadData();
+      renderPumpHealth(document.getElementById("pumpHealthContainer"), true);
+      renderChangeLog(document.getElementById("changeLogContainer"));
+    } catch (err) {
+      alert("Could not save: " + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = "Save";
+    }
+  });
+}
+
+// ============================================================
+// Init
+// ============================================================
+async function init() {
+  if (IS_EDIT) {
+    document.getElementById("deviceIdDisplay").value = DEVICE_ID;
+    document.getElementById("copyDeviceIdBtn").addEventListener("click", () => {
+      navigator.clipboard.writeText(DEVICE_ID);
+      showToast("Device ID copied.");
+    });
+    document.getElementById("recheckBtn").addEventListener("click", checkDeviceAndProceed);
+    await checkDeviceAndProceed();
+    return;
+  }
+  document.getElementById("appShell").style.display = "";
+  startApp();
+}
+
+async function checkDeviceAndProceed() {
+  try {
+    const res = await fetch(`${API_URL}?action=checkDevice&deviceId=${encodeURIComponent(DEVICE_ID)}`);
+    const result = await res.json();
+    if (result.approved) {
+      EDITOR_NAME = result.name;
+      document.getElementById("pendingGate").classList.add("hidden");
+      document.getElementById("appShell").style.display = "";
+      document.getElementById("editorNameTag").textContent = `Editing as: ${EDITOR_NAME}`;
+      startApp();
+    } else {
+      document.getElementById("appShell").style.display = "none";
+      document.getElementById("pendingGate").classList.remove("hidden");
+    }
+  } catch (err) {
+    document.getElementById("pendingGate").classList.remove("hidden");
+    document.getElementById("pendingGate").querySelector(".hint").textContent =
+      "Could not reach the server to check approval. " + err.message;
+  }
+}
+
+async function startApp() {
+  buildTabs();
+  if (IS_EDIT) document.getElementById("weekDate").valueAsDate = new Date();
+  try {
+    await loadData();
+    if (IS_EDIT) renderWeeklyForm();
+    renderPumpHealth(document.getElementById("pumpHealthContainer"), IS_EDIT);
+    renderRunningStatus(document.getElementById("runningStatusContainer"));
+    renderChangeLog(document.getElementById("changeLogContainer"));
+  } catch (err) {
+    document.getElementById("pumpHealthContainer").innerHTML =
+      `<p class="hint">Could not load data. Check that API_URL is set correctly.<br>${err.message}</p>`;
+  }
+}
+init();
+</script>
+</body>
+</html>
