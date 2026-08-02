@@ -783,20 +783,29 @@ document.getElementById("screenshotBtn").addEventListener("click", async () => {
   btn.textContent = "Capturing...";
   
   try {
-    // Render the container to a canvas. Scale 2 gives a high-res image.
-    const canvas = await html2canvas(container, {
-      backgroundColor: "#F2F4F7", 
-      scale: 2 
+    const canvas = await html2canvas(container, { backgroundColor: "#F2F4F7", scale: 2 });
+    
+    // Convert the canvas to a file object
+    canvas.toBlob(async (blob) => {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const file = new File([blob], `PumpHealth_${dateStr}.png`, { type: "image/png" });
+
+      // Check if the device supports the native share menu
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'Pump Health Status',
+          files: [file]
+        });
+        showToast("Screenshot shared.");
+      } else {
+        // Fallback to standard download for desktop or older browsers
+        const link = document.createElement("a");
+        link.download = file.name;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        showToast("Screenshot downloaded.");
+      }
     });
-    
-    // Create a temporary link to download the image
-    const link = document.createElement("a");
-    const dateStr = new Date().toISOString().slice(0, 10);
-    link.download = `PumpHealth_${dateStr}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-    
-    showToast("Screenshot downloaded.");
   } catch (err) {
     alert("Failed to capture screenshot: " + err.message);
   } finally {
