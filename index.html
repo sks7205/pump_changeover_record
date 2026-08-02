@@ -151,6 +151,7 @@ button.primary:disabled { opacity: .5; }
 }
 .toast.show { opacity: 1; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -171,6 +172,10 @@ button.primary:disabled { opacity: .5; }
   </div>
 </div>
 
+<div id="loadingIndicator" style="text-align:center; padding: 50px 20px; color: var(--navy); font-weight: 600;">
+  Connecting to database... Please wait.
+</div>
+
 <div id="appShell" style="display:none">
 <nav class="tabs" id="tabsNav"></nav>
 
@@ -187,8 +192,12 @@ button.primary:disabled { opacity: .5; }
   </div>
 
   <div id="tab-health" class="tab-panel active">
-    <p class="hint">Green = healthy &amp; currently running. Red = faulty, on standby. Dark red = faulty AND currently running - urgent.</p>
-    <div id="pumpHealthContainer"><p class="hint">Loading…</p></div>
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+      <p class="hint" style="margin: 0;">Green = healthy &amp; currently running. Red = faulty, on standby. Dark red = faulty AND running.</p>
+      <button class="link-btn" id="screenshotBtn" style="margin: 0; padding: 6px 10px; background: white; border: 1px solid var(--border); border-radius: 4px; text-decoration: none;">📷 Download Screenshot</button>
+    </div>
+    <!-- Added a slight padding/background inline here to ensure the canvas capture doesn't render transparent edges as black -->
+    <div id="pumpHealthContainer" style="padding: 10px; background: var(--bg); border-radius: 8px;"><p class="hint">Loading…</p></div>
   </div>
 
   <div id="tab-running" class="tab-panel">
@@ -202,6 +211,11 @@ button.primary:disabled { opacity: .5; }
   </div>
 
   <div id="tab-log" class="tab-panel">
+    <label for="logDateFilter">Filter by Date</label>
+    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+      <input type="date" id="logDateFilter" style="margin-bottom: 0;">
+      <button class="toggle-btn" id="clearLogFilterBtn" style="display: none;">Clear Filter</button>
+    </div>
     <div id="changeLogContainer"><p class="hint">Loading…</p></div>
   </div>
 </main>
@@ -308,36 +322,15 @@ function pumpHealthMap() {
   const map = {};
   STATE.pumpHealth.forEach(row => {
     if (!map[row.equipment]) map[row.equipment] = {};
-    map[row.equipment][row.pumpCode] = { status: row.status, remarks: row.remarks };
+    map[row.equipment][row.pumpCode] = { 
+      status: row.status, 
+      remarks: row.remarks,
+      updatedAt: row.updatedAt // Added this line
+    };
   });
   return map;
 }
 
-function runningStatusMap(cutoffDate) {
-  const byEquip = {};
-  STATE.weeklyLog.forEach(row => {
-    const d = new Date(row.date);
-    if (cutoffDate && d > cutoffDate) return;
-    if (!byEquip[row.equipment] || d > byEquip[row.equipment]._d) {
-      byEquip[row.equipment] = { ...row, _d: d };
-    }
-  });
-  const out = {};
-  const now = new Date();
-  Object.keys(byEquip).forEach(eq => {
-    const rec = byEquip[eq];
-    const days = Math.floor((now - rec._d) / 86400000);
-    out[eq] = {
-      pumps: splitCodes(rec.changedTo),
-      asFound: splitCodes(rec.asFound),
-      lastDate: rec.date,
-      daysSince: days,
-      status: days > OVERDUE_DAYS ? "Overdue" : "OK",
-      deviation: rec.deviation || "",
-    };
-  });
-  return out;
-}
 
 function colorClass(equipCfg, pumpCode, healthMap, running) {
   const health = (healthMap[equipCfg.name] || {})[pumpCode];
@@ -370,15 +363,26 @@ function renderPumpHealth(container, editable) {
       const rec = running[eq.name];
       const row = document.createElement("div");
       row.className = "equip-row";
+      
+      const health = healthMap[eq.name] || {};
+      
+      // Calculate the most recent update date for this specific equipment
+      let lastUpdate = "";
+      Object.values(health).forEach(h => {
+        if (h.updatedAt && h.updatedAt > lastUpdate) lastUpdate = h.updatedAt;
+      });
+      const dateBadge = lastUpdate ? `<span style="font-size: .75rem; color: var(--muted); float: right;">Updated: ${lastUpdate}</span>` : "";
+
       const chips = eq.pumps.map(code => {
         const cls = colorClass(eq, code, healthMap, rec);
         return `<span class="chip ${cls}" title="${code}">${code}</span>`;
       }).join("");
-      const health = healthMap[eq.name] || {};
+      
       const remarkText = Object.values(health).map(h => h.remarks).filter(Boolean)[0] || "";
       const deviation = rec && rec.deviation ? `<div class="deviation">⚠ ${rec.deviation}</div>` : "";
+      
       row.innerHTML = `
-        <div class="equip-name">${eq.name}</div>
+        <div class="equip-name">${eq.name} ${dateBadge}</div>
         <div class="chip-row">${chips}</div>
         ${remarkText ? `<div class="remark">${remarkText}</div>` : ""}
         ${deviation}
@@ -412,8 +416,8 @@ function renderRunningStatus(container) {
 
 function renderHistoryLookup(container, dateStr) {
   if (!dateStr) { container.innerHTML = "<p class='hint'>Pick a date above.</p>"; return; }
-  const cutoff = new Date(dateStr);
-  const running = runningStatusMap(cutoff);
+  // Pass the string directly instead of converting to new Date(dateStr)
+  const running = runningStatusMap(dateStr); 
   let html = `<table class="status-table"><thead><tr>
     <th>Equipment</th><th>Pump(s) Running (as of ${dateStr})</th><th>Actual Log Date Used</th>
   </tr></thead><tbody>`;
@@ -429,8 +433,47 @@ function renderHistoryLookup(container, dateStr) {
   container.innerHTML = html;
 }
 
-function renderChangeLog(container) {
-  const rows = [...STATE.changeLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+function runningStatusMap(cutoffDateStr) {
+  const byEquip = {};
+  STATE.weeklyLog.forEach(row => {
+    // Compare YYYY-MM-DD strings directly to prevent timezone shift bugs
+    if (typeof cutoffDateStr === "string" && row.date > cutoffDateStr) return; 
+    
+    const d = new Date(row.date);
+    if (!byEquip[row.equipment] || d > byEquip[row.equipment]._d) {
+      byEquip[row.equipment] = { ...row, _d: d };
+    }
+  });
+  const out = {};
+  const now = new Date();
+  Object.keys(byEquip).forEach(eq => {
+    const rec = byEquip[eq];
+    const days = Math.floor((now - rec._d) / 86400000);
+    out[eq] = {
+      pumps: splitCodes(rec.changedTo),
+      asFound: splitCodes(rec.asFound),
+      lastDate: rec.date,
+      daysSince: days,
+      status: days > OVERDUE_DAYS ? "Overdue" : "OK",
+      deviation: rec.deviation || "",
+    };
+  });
+  return out;
+}
+
+function renderChangeLog(container, filterDateStr) {
+  let rows = [...STATE.changeLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  
+  // Apply date filter if one is selected
+  if (filterDateStr) {
+    rows = rows.filter(r => {
+      const d = new Date(r.timestamp);
+      // Format the log timestamp to YYYY-MM-DD so it matches the date picker input
+      const rowDateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
+      return rowDateStr === filterDateStr;
+    });
+  }
+
   let html = `<table class="status-table"><thead><tr>
     <th>When</th><th>Who</th><th>Type</th><th>Equipment</th><th>Field</th><th>From</th><th>To</th>
   </tr></thead><tbody>`;
@@ -446,7 +489,7 @@ function renderChangeLog(container) {
     </tr>`;
   });
   html += "</tbody></table>";
-  if (!rows.length) html = "<p class='hint'>No changes logged yet.</p>";
+  if (!rows.length) html = "<p class='hint'>No changes logged yet or found for this date.</p>";
   container.innerHTML = html;
 }
 
@@ -668,7 +711,7 @@ async function init() {
     await checkDeviceAndProceed();
     return;
   }
-  document.getElementById("appShell").style.display = "";
+  // Let startApp handle showing the appShell when ready
   startApp();
 }
 
@@ -679,14 +722,15 @@ async function checkDeviceAndProceed() {
     if (result.approved) {
       EDITOR_NAME = result.name;
       document.getElementById("pendingGate").classList.add("hidden");
-      document.getElementById("appShell").style.display = "";
       document.getElementById("editorNameTag").textContent = `Editing as: ${EDITOR_NAME}`;
       startApp();
     } else {
+      document.getElementById("loadingIndicator").style.display = "none";
       document.getElementById("appShell").style.display = "none";
       document.getElementById("pendingGate").classList.remove("hidden");
     }
   } catch (err) {
+    document.getElementById("loadingIndicator").style.display = "none";
     document.getElementById("pendingGate").classList.remove("hidden");
     document.getElementById("pendingGate").querySelector(".hint").textContent =
       "Could not reach the server to check approval. " + err.message;
@@ -705,8 +749,62 @@ async function startApp() {
   } catch (err) {
     document.getElementById("pumpHealthContainer").innerHTML =
       `<p class="hint">Could not load data. Check that API_URL is set correctly.<br>${err.message}</p>`;
+  } finally {
+    // Hide the loader and show the app once data is ready
+    const loader = document.getElementById("loadingIndicator");
+    if (loader) loader.style.display = "none";
+    document.getElementById("appShell").style.display = "";
   }
 }
+
+// --- Event Listeners for New Features ---
+
+// Change Log Filter Listeners
+document.getElementById("logDateFilter").addEventListener("change", (e) => {
+  const dateVal = e.target.value;
+  renderChangeLog(document.getElementById("changeLogContainer"), dateVal);
+  document.getElementById("clearLogFilterBtn").style.display = dateVal ? "inline-block" : "none";
+});
+
+document.getElementById("clearLogFilterBtn").addEventListener("click", () => {
+  document.getElementById("logDateFilter").value = "";
+  document.getElementById("clearLogFilterBtn").style.display = "none";
+  // Re-render without the filter
+  renderChangeLog(document.getElementById("changeLogContainer")); 
+});
+
+// Canvas Screenshot Listener
+document.getElementById("screenshotBtn").addEventListener("click", async () => {
+  const container = document.getElementById("pumpHealthContainer");
+  const btn = document.getElementById("screenshotBtn");
+  const originalText = btn.textContent;
+  
+  btn.disabled = true;
+  btn.textContent = "Capturing...";
+  
+  try {
+    // Render the container to a canvas. Scale 2 gives a high-res image.
+    const canvas = await html2canvas(container, {
+      backgroundColor: "#F2F4F7", 
+      scale: 2 
+    });
+    
+    // Create a temporary link to download the image
+    const link = document.createElement("a");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.download = `PumpHealth_${dateStr}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    
+    showToast("Screenshot downloaded.");
+  } catch (err) {
+    alert("Failed to capture screenshot: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
 init();
 </script>
 </body>
