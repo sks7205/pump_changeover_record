@@ -237,6 +237,15 @@ button.primary:disabled { opacity: .5; }
     <button class="link-btn" style="margin-top:10px" onclick="closeHealthEditor()">Cancel</button>
   </div>
 </div>
+<div class="modal-backdrop hidden" id="screenshotModal">
+  <div class="modal" style="text-align: center;">
+    <h4>Screenshot Ready</h4>
+    <p class="hint" style="color: var(--navy); font-weight: 600;">Long-press the image below and select "Save to Photos" or "Share".</p>
+    <img id="screenshotPreview" style="max-width: 100%; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+    <button class="primary" onclick="document.getElementById('screenshotModal').classList.add('hidden')">Close</button>
+  </div>
+</div>
+
 
 <div class="toast" id="toast"></div>
 
@@ -783,29 +792,19 @@ document.getElementById("screenshotBtn").addEventListener("click", async () => {
   btn.textContent = "Capturing...";
   
   try {
-    const canvas = await html2canvas(container, { backgroundColor: "#F2F4F7", scale: 2 });
-    
-    // Convert the canvas to a file object
-    canvas.toBlob(async (blob) => {
-      const dateStr = new Date().toISOString().slice(0, 10);
-      const file = new File([blob], `PumpHealth_${dateStr}.png`, { type: "image/png" });
-
-      // Check if the device supports the native share menu
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: 'Pump Health Status',
-          files: [file]
-        });
-        showToast("Screenshot shared.");
-      } else {
-        // Fallback to standard download for desktop or older browsers
-        const link = document.createElement("a");
-        link.download = file.name;
-        link.href = URL.createObjectURL(blob);
-        link.click();
-        showToast("Screenshot downloaded.");
-      }
+    // Generate the canvas
+    const canvas = await html2canvas(container, { 
+      backgroundColor: "#F2F4F7", 
+      scale: 2 // Keeps the text sharp on high-res phone screens
     });
+    
+    // Convert the canvas directly to an image source URL
+    const imgData = canvas.toDataURL("image/png");
+    
+    // Inject the image into the modal and show it
+    document.getElementById("screenshotPreview").src = imgData;
+    document.getElementById("screenshotModal").classList.remove("hidden");
+    
   } catch (err) {
     alert("Failed to capture screenshot: " + err.message);
   } finally {
