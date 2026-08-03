@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARS-2/3 Pump Tracker</title>
+<title>ARS-2/3 & Mills Pump Tracker</title>
 <style>
 :root {
   --navy: #1F4E78;
@@ -156,7 +156,7 @@ button.primary:disabled { opacity: .5; }
 <body>
 
 <header class="topbar">
-  <h1>ARS-2 / ARS-3 Pump Tracker</h1>
+  <h1>ARS / Mills Pump Tracker</h1>
   <span class="mode-tag" id="modeTag">View only</span>
   <div id="editorNameTag" style="font-size:.8rem;margin-top:4px;opacity:.85"></div>
 </header>
@@ -187,6 +187,7 @@ button.primary:disabled { opacity: .5; }
     <input type="text" id="generalRemarks" placeholder="e.g. Routine weekly changeover">
     <p class="hint">For each equipment: tap which pump(s) were found running, and which are now
     running after your changeover. Pre-filled with last week's values - only change what's different.</p>
+    <p class="hint" style="color:var(--navy); font-weight:600;">Showing only equipment your device is authorized to edit.</p>
     <div id="weeklyFormContainer"><p class="hint">Loading…</p></div>
     <button class="primary" id="submitWeeklyBtn">Save this week's changeover</button>
   </div>
@@ -196,7 +197,6 @@ button.primary:disabled { opacity: .5; }
       <p class="hint" style="margin: 0;">Green = healthy &amp; currently running. Red = faulty, on standby. Dark red = faulty AND running.</p>
       <button class="link-btn" id="screenshotBtn" style="margin: 0; padding: 6px 10px; background: white; border: 1px solid var(--border); border-radius: 4px; text-decoration: none;">📷 Download Screenshot</button>
     </div>
-    <!-- Added a slight padding/background inline here to ensure the canvas capture doesn't render transparent edges as black -->
     <div id="pumpHealthContainer" style="padding: 10px; background: var(--bg); border-radius: 8px;"><p class="hint">Loading…</p></div>
   </div>
 
@@ -246,15 +246,11 @@ button.primary:disabled { opacity: .5; }
   </div>
 </div>
 
-
 <div class="toast" id="toast"></div>
 
 <script>
 // ============================================================
-// MODE: view by default. Append ?edit=true to the URL to get the
-// edit form + pump-health update buttons. Share the plain URL with
-// people who should only see the dashboard, and the ?edit=true URL
-// with people who should be entering data.
+// MODE & DEVICE SETUP
 // ============================================================
 const IS_EDIT = new URLSearchParams(window.location.search).get("edit") === "true";
 
@@ -269,13 +265,13 @@ function getDeviceId() {
 }
 const DEVICE_ID = getDeviceId();
 let EDITOR_NAME = "";
+let ALLOWED_TARGETS = ""; 
 
 // ============================================================
-// EQUIPMENT CONFIG - mirrors the Excel Pump Health sheet exactly.
-// "always" pumps (only LUL/AB/BP/TP/CM's P4) are fixed recirculation
-// pumps - always expected running, not part of the weekly duty swap.
+// EQUIPMENT CONFIG - Added Mill-1, Mill-2, and RMT
 // ============================================================
 const EQUIPMENT_CONFIG = [
+  // Existing ARS-2
   { name: "LUL-1",  block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
   { name: "LUL-2",  block: "ARS-2", pumps: ["P1", "P2", "P4"], always: ["P4"] },
   { name: "AB-1",   block: "ARS-2", pumps: ["P1", "P2", "P3", "P4"], always: ["P4"] },
@@ -291,6 +287,8 @@ const EQUIPMENT_CONFIG = [
   { name: "F-HPU-1", block: "ARS-2", pumps: ["P1", "P2"], always: [] },
   { name: "F-HPU-2", block: "ARS-2", pumps: ["P1", "P2"], always: [] },
   { name: "F-HPU-3", block: "ARS-2", pumps: ["P1", "P2"], always: [] },
+  
+  // Existing Pump House & ARS-3 & Cooling
   { name: "Hot Well",  block: "Pump House", pumps: ["A", "B", "C", "D"], always: [] },
   { name: "Cold Well", block: "Pump House", pumps: ["A", "B", "C", "D"], always: [] },
   { name: "PT-1", block: "ARS-3", pumps: ["P1", "P2"], always: [] },
@@ -304,8 +302,23 @@ const EQUIPMENT_CONFIG = [
   { name: "DM water circulation", block: "Cooling System", pumps: ["P4", "P5"], always: [] },
   { name: "DM HE cooling",        block: "Cooling System", pumps: ["P6", "P7"], always: [] },
   { name: "Distilled HE cooling", block: "Cooling System", pumps: ["P8", "P9"], always: [] },
+  
+  // New: Mill-1
+  { name: "Mill-1 HP", block: "Mill-1", pumps: ["P1", "P2", "P3"], always: [] },
+  { name: "Mill-1 LP", block: "Mill-1", pumps: ["P1", "P2"], always: [] },
+  { name: "Mill-1 Conditioning", block: "Mill-1", pumps: ["P1", "P2"], always: [] },
+  { name: "Mill-1 Reducing", block: "Mill-1", pumps: ["P1", "P2"], always: [] },
+
+  // New: Mill-2
+  { name: "Mill-2 HP", block: "Mill-2", pumps: ["P1", "P2", "P3"], always: [] },
+  { name: "Mill-2 LP", block: "Mill-2", pumps: ["P1", "P2"], always: [] },
+  { name: "Mill-2 Conditioning", block: "Mill-2", pumps: ["P1", "P2"], always: [] },
+  { name: "Mill-2 Reducing", block: "Mill-2", pumps: ["P1", "P2"], always: [] },
+
+  // New: RMT
+  { name: "Crusher", block: "RMT", pumps: ["P1", "P2", "P3", "P4"], always: ["P4"] },
 ];
-const BLOCK_ORDER = ["ARS-2", "Pump House", "ARS-3", "Cooling System"];
+const BLOCK_ORDER = ["ARS-2", "Pump House", "ARS-3", "Cooling System", "Mill-1", "Mill-2", "RMT"];
 
 // >>> SET THIS to your deployed Apps Script Web App URL <<<
 const API_URL = "https://script.google.com/macros/s/AKfycbw-lErqSeoo6NgoxX4bRoxr6Qe0rAQiETLF1MDQo4H6xIoEqQ3w17ZzWHVIygs6XNOQ/exec";
@@ -334,12 +347,19 @@ function pumpHealthMap() {
     map[row.equipment][row.pumpCode] = { 
       status: row.status, 
       remarks: row.remarks,
-      updatedAt: row.updatedAt // Added this line
+      updatedAt: row.updatedAt 
     };
   });
   return map;
 }
 
+// Granular Permission Helper
+function canEdit(eqName, blockName) {
+  if (!ALLOWED_TARGETS) return false;
+  const targets = ALLOWED_TARGETS.split(",").map(s => s.trim().toLowerCase());
+  if (targets.includes("all")) return true;
+  return targets.includes(eqName.toLowerCase()) || targets.includes(blockName.toLowerCase());
+}
 
 function colorClass(equipCfg, pumpCode, healthMap, running) {
   const health = (healthMap[equipCfg.name] || {})[pumpCode];
@@ -374,8 +394,6 @@ function renderPumpHealth(container, editable) {
       row.className = "equip-row";
       
       const health = healthMap[eq.name] || {};
-      
-      // Calculate the most recent update date for this specific equipment
       let lastUpdate = "";
       Object.values(health).forEach(h => {
         if (h.updatedAt && h.updatedAt > lastUpdate) lastUpdate = h.updatedAt;
@@ -390,12 +408,15 @@ function renderPumpHealth(container, editable) {
       const remarkText = Object.values(health).map(h => h.remarks).filter(Boolean)[0] || "";
       const deviation = rec && rec.deviation ? `<div class="deviation">⚠ ${rec.deviation}</div>` : "";
       
+      // Determine if the current device has permission to show the 'Update health' button
+      const hasPermission = editable && canEdit(eq.name, eq.block);
+
       row.innerHTML = `
         <div class="equip-name">${eq.name} ${dateBadge}</div>
         <div class="chip-row">${chips}</div>
         ${remarkText ? `<div class="remark">${remarkText}</div>` : ""}
         ${deviation}
-        ${editable ? `<button class="link-btn" onclick="openHealthEditor('${eq.name}')">Update health</button>` : ""}
+        ${hasPermission ? `<button class="link-btn" onclick="openHealthEditor('${eq.name}')">Update health</button>` : ""}
       `;
       section.appendChild(row);
     });
@@ -425,7 +446,6 @@ function renderRunningStatus(container) {
 
 function renderHistoryLookup(container, dateStr) {
   if (!dateStr) { container.innerHTML = "<p class='hint'>Pick a date above.</p>"; return; }
-  // Pass the string directly instead of converting to new Date(dateStr)
   const running = runningStatusMap(dateStr); 
   let html = `<table class="status-table"><thead><tr>
     <th>Equipment</th><th>Pump(s) Running (as of ${dateStr})</th><th>Actual Log Date Used</th>
@@ -445,9 +465,7 @@ function renderHistoryLookup(container, dateStr) {
 function runningStatusMap(cutoffDateStr) {
   const byEquip = {};
   STATE.weeklyLog.forEach(row => {
-    // Compare YYYY-MM-DD strings directly to prevent timezone shift bugs
     if (typeof cutoffDateStr === "string" && row.date > cutoffDateStr) return; 
-    
     const d = new Date(row.date);
     if (!byEquip[row.equipment] || d > byEquip[row.equipment]._d) {
       byEquip[row.equipment] = { ...row, _d: d };
@@ -472,17 +490,13 @@ function runningStatusMap(cutoffDateStr) {
 
 function renderChangeLog(container, filterDateStr) {
   let rows = [...STATE.changeLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  
-  // Apply date filter if one is selected
   if (filterDateStr) {
     rows = rows.filter(r => {
       const d = new Date(r.timestamp);
-      // Format the log timestamp to YYYY-MM-DD so it matches the date picker input
       const rowDateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, '0') + "-" + String(d.getDate()).padStart(2, '0');
       return rowDateStr === filterDateStr;
     });
   }
-
   let html = `<table class="status-table"><thead><tr>
     <th>When</th><th>Who</th><th>Type</th><th>Equipment</th><th>Field</th><th>From</th><th>To</th>
   </tr></thead><tbody>`;
@@ -503,7 +517,7 @@ function renderChangeLog(container, filterDateStr) {
 }
 
 // ============================================================
-// Tabs - which ones show depends on IS_EDIT
+// Tabs 
 // ============================================================
 function buildTabs() {
   const tabs = IS_EDIT
@@ -515,7 +529,6 @@ function buildTabs() {
     `<button class="tab-btn${i === 0 ? " active" : ""}" data-tab="${id}">${label}</button>`
   ).join("");
 
-  // Clear the static "active" classes from the HTML, then activate only the first tab
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
   document.getElementById(`tab-${tabs[0][0]}`).classList.add("active");
   if (!IS_EDIT) document.getElementById("tab-submit").style.display = "none";
@@ -555,8 +568,10 @@ function renderWeeklyForm() {
   weeklySelections = {};
 
   BLOCK_ORDER.forEach(block => {
-    const equips = EQUIPMENT_CONFIG.filter(e => e.block === block);
+    // Filter equips for this block AND verify if this user has permissions
+    const equips = EQUIPMENT_CONFIG.filter(e => e.block === block && canEdit(e.name, e.block));
     if (!equips.length) return;
+
     const heading = document.createElement("h3");
     heading.textContent = block;
     heading.style.color = "#1F4E78";
@@ -568,7 +583,7 @@ function renderWeeklyForm() {
 
     equips.forEach(eq => {
       const prev = running[eq.name] ? running[eq.name].pumps : [];
-      weeklySelections[eq.name] = { asFound: new Set(prev), changedTo: new Set(prev) };
+      weeklySelections[eq.name] = { block: eq.block, asFound: new Set(prev), changedTo: new Set(prev) };
 
       const block_el = document.createElement("div");
       block_el.className = "form-equip-block";
@@ -613,10 +628,13 @@ if (IS_EDIT) {
       if (sel.changedTo.size === 0 && sel.asFound.size === 0) return;
       entries.push({
         equipment: eq,
+        block: sel.block,
         asFound: [...sel.asFound].join(", "),
         changedTo: [...sel.changedTo].join(", "),
       });
     });
+
+    if (entries.length === 0) return alert("No changes to submit.");
 
     const btn = document.getElementById("submitWeeklyBtn");
     btn.disabled = true; btn.textContent = "Saving…";
@@ -646,12 +664,14 @@ if (IS_EDIT) {
 // Edit-only: pump health editor modal
 // ============================================================
 let healthEditEquip = null;
+let healthEditBlock = null;
 let healthEditStatus = null;
 
 function openHealthEditor(equipName) {
   healthEditEquip = equipName;
   healthEditStatus = null;
   const eq = EQUIPMENT_CONFIG.find(e => e.name === equipName);
+  healthEditBlock = eq.block;
   document.getElementById("healthModalTitle").textContent = `Update pump health - ${equipName}`;
   const select = document.getElementById("healthPumpSelect");
   select.innerHTML = eq.pumps.map(p => `<option value="${p}">${p}</option>`).join("");
@@ -687,7 +707,7 @@ if (IS_EDIT) {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({
-          action: "updateHealth", deviceId: DEVICE_ID, equipment: healthEditEquip, pumpCode,
+          action: "updateHealth", deviceId: DEVICE_ID, equipment: healthEditEquip, block: healthEditBlock, pumpCode,
           status: healthEditStatus, remarks,
         }),
       });
@@ -720,7 +740,6 @@ async function init() {
     await checkDeviceAndProceed();
     return;
   }
-  // Let startApp handle showing the appShell when ready
   startApp();
 }
 
@@ -730,6 +749,7 @@ async function checkDeviceAndProceed() {
     const result = await res.json();
     if (result.approved) {
       EDITOR_NAME = result.name;
+      ALLOWED_TARGETS = result.allowedTargets || "";
       document.getElementById("pendingGate").classList.add("hidden");
       document.getElementById("editorNameTag").textContent = `Editing as: ${EDITOR_NAME}`;
       startApp();
@@ -759,7 +779,6 @@ async function startApp() {
     document.getElementById("pumpHealthContainer").innerHTML =
       `<p class="hint">Could not load data. Check that API_URL is set correctly.<br>${err.message}</p>`;
   } finally {
-    // Hide the loader and show the app once data is ready
     const loader = document.getElementById("loadingIndicator");
     if (loader) loader.style.display = "none";
     document.getElementById("appShell").style.display = "";
@@ -768,7 +787,6 @@ async function startApp() {
 
 // --- Event Listeners for New Features ---
 
-// Change Log Filter Listeners
 document.getElementById("logDateFilter").addEventListener("change", (e) => {
   const dateVal = e.target.value;
   renderChangeLog(document.getElementById("changeLogContainer"), dateVal);
@@ -778,11 +796,9 @@ document.getElementById("logDateFilter").addEventListener("change", (e) => {
 document.getElementById("clearLogFilterBtn").addEventListener("click", () => {
   document.getElementById("logDateFilter").value = "";
   document.getElementById("clearLogFilterBtn").style.display = "none";
-  // Re-render without the filter
   renderChangeLog(document.getElementById("changeLogContainer")); 
 });
 
-// Canvas Screenshot Listener
 document.getElementById("screenshotBtn").addEventListener("click", async () => {
   const container = document.getElementById("pumpHealthContainer");
   const btn = document.getElementById("screenshotBtn");
@@ -792,19 +808,13 @@ document.getElementById("screenshotBtn").addEventListener("click", async () => {
   btn.textContent = "Capturing...";
   
   try {
-    // Generate the canvas
     const canvas = await html2canvas(container, { 
       backgroundColor: "#F2F4F7", 
-      scale: 2 // Keeps the text sharp on high-res phone screens
+      scale: 2 
     });
-    
-    // Convert the canvas directly to an image source URL
     const imgData = canvas.toDataURL("image/png");
-    
-    // Inject the image into the modal and show it
     document.getElementById("screenshotPreview").src = imgData;
     document.getElementById("screenshotModal").classList.remove("hidden");
-    
   } catch (err) {
     alert("Failed to capture screenshot: " + err.message);
   } finally {
