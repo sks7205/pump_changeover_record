@@ -479,17 +479,21 @@ function renderHistoryLookup(container, dateStr) {
 function runningStatusMap(cutoffDateStr) {
   const byEquip = {};
   STATE.weeklyLog.forEach(row => {
+    // If a cutoff date is provided (for History Lookup), respect it
     if (typeof cutoffDateStr === "string" && row.date > cutoffDateStr) return; 
-    const d = new Date(row.date);
-    if (!byEquip[row.equipment] || d > byEquip[row.equipment]._d) {
-      byEquip[row.equipment] = { ...row, _d: d };
+    
+    // Fix: Use precise timestamp instead of date to prevent same-day conflicts
+    const t = new Date(row.timestamp);
+    if (!byEquip[row.equipment] || t > byEquip[row.equipment]._t) {
+      byEquip[row.equipment] = { ...row, _t: t };
     }
   });
   const out = {};
   const now = new Date();
   Object.keys(byEquip).forEach(eq => {
     const rec = byEquip[eq];
-    const days = Math.floor((now - rec._d) / 86400000);
+    // Calculate days since the exact timestamp rather than just the date
+    const days = Math.floor((now - rec._t) / 86400000);
     out[eq] = {
       pumps: splitCodes(rec.changedTo),
       asFound: splitCodes(rec.asFound),
