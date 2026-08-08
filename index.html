@@ -398,7 +398,16 @@ function renderPumpHealth(container, editable) {
       Object.values(health).forEach(h => {
         if (h.updatedAt && h.updatedAt > lastUpdate) lastUpdate = h.updatedAt;
       });
-      const dateBadge = lastUpdate ? `<span style="font-size: .75rem; color: var(--muted); float: right;">Updated: ${lastUpdate}</span>` : "";
+      
+      let formattedDate = "";
+      if (lastUpdate) {
+        const d = new Date(lastUpdate);
+        formattedDate = !isNaN(d) ? d.toLocaleDateString() : lastUpdate;
+      }
+
+      // Changes here: Changed formatting and added change over date
+      const dateBadge = lastUpdate ? `<div style="font-size: .75rem; color: var(--muted); font-weight: normal; text-align: right;">Pump health updated: ${formattedDate}</div>` : "";
+      const changeOverBadge = (rec && rec.lastDate) ? `<div style="font-size: .75rem; color: var(--muted); font-weight: normal; text-align: right;">Pump change over date: ${rec.lastDate}</div>` : "";
 
       const chips = eq.pumps.map(code => {
         const cls = colorClass(eq, code, healthMap, rec);
@@ -408,11 +417,16 @@ function renderPumpHealth(container, editable) {
       const remarkText = Object.values(health).map(h => h.remarks).filter(Boolean)[0] || "";
       const deviation = rec && rec.deviation ? `<div class="deviation">⚠ ${rec.deviation}</div>` : "";
       
-      // Determine if the current device has permission to show the 'Update health' button
       const hasPermission = editable && canEdit(eq.name, eq.block);
 
       row.innerHTML = `
-        <div class="equip-name">${eq.name} ${dateBadge}</div>
+        <div class="equip-name" style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <span>${eq.name}</span>
+          <div style="text-align: right;">
+            ${dateBadge}
+            ${changeOverBadge}
+          </div>
+        </div>
         <div class="chip-row">${chips}</div>
         ${remarkText ? `<div class="remark">${remarkText}</div>` : ""}
         ${deviation}
@@ -583,7 +597,7 @@ function renderWeeklyForm() {
 
     equips.forEach(eq => {
       const prev = running[eq.name] ? running[eq.name].pumps : [];
-      weeklySelections[eq.name] = { block: eq.block, asFound: new Set(prev), changedTo: new Set(prev) };
+      weeklySelections[eq.name] = { block: eq.block, asFound: new Set(prev), changedTo: new Set() };
 
       const block_el = document.createElement("div");
       block_el.className = "form-equip-block";
@@ -625,7 +639,7 @@ if (IS_EDIT) {
     const entries = [];
     Object.keys(weeklySelections).forEach(eq => {
       const sel = weeklySelections[eq];
-      if (sel.changedTo.size === 0 && sel.asFound.size === 0) return;
+      if (sel.changedTo.size === 0) return;
       entries.push({
         equipment: eq,
         block: sel.block,
